@@ -1,0 +1,5 @@
+{
+  "databasetype": "mongodb",
+  "dbconnection": "mongodb://172.0.0.1",
+  "restfulapi_endpoint": "localhost:8181"
+}
