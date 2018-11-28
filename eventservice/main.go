@@ -3,10 +3,10 @@ package main
 import (
 	"cloud-microservice-go/lib/configuration"
 	"cloud-microservice-go/lib/persistence/dblayer"
-	"cloud-microservice-go/rest"
+	"cloud-microservice-go/eventservice/rest"
 	"flag"
 	"fmt"
-	"github.com/sirupsen/logrus"
+	"log"
 )
 
 func main()  {
@@ -16,5 +16,13 @@ func main()  {
 	config, _ := configuration.ExtractConfiguration(*configPath)
 	fmt.Println("Connecting to database...")
 	dbHandler, _ := dblayer.NewPersistenceLayer(config.DatabaseType, config.DBConnection)
-	logrus.Println(rest.ServeAPI(config.RestfulEndPoint, dbHandler))
+	httpError, httptlsError := rest.ServeAPI(config.RestfulEndPoint, config.RestfulTLSEndPint, dbHandler)
+	fmt.Println("serve event service at http port: " + config.RestfulEndPoint)
+
+	select {
+	case err := <- httpError:
+		log.Fatal("HTTP Error:", err)
+	case err := <- httptlsError:
+		log.Fatal("HTTPS Error:", err)
+	}
 }

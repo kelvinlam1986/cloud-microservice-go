@@ -59,6 +59,7 @@ func (eh *eventServiceHandler) FindEventHandler(w http.ResponseWriter, r *http.R
 }
 
 func (eh *eventServiceHandler) AllEventHandler(w http.ResponseWriter, r *http.Request)  {
+	fmt.Println("All events we are here")
 	events, err := eh.dbHandler.FindAllAvailableEvents()
 	if err != nil {
 		w.WriteHeader(500)
