@@ -1,13 +1,14 @@
 package rest
 
 import (
+	"cloud-microservice-go/lib/msgqueue"
 	"cloud-microservice-go/lib/persistence"
 	"github.com/gorilla/mux"
 	"net/http"
 )
 
-func ServeAPI(endpoint, tlsendpoint string, databaseHandler persistence.DatabaseHandler) (chan error, chan error) {
-	handler := New(databaseHandler)
+func ServeAPI(endpoint, tlsendpoint string, databaseHandler persistence.DatabaseHandler, eventEmitter msgqueue.EventEmitter) (chan error, chan error) {
+	handler := newEventHandler(databaseHandler, eventEmitter)
 	r := mux.NewRouter()
 	eventsRouter := r.PathPrefix("/events").Subrouter()
 	eventsRouter.Methods("GET").PathPrefix("/{SearchCriteria}/{search}").HandlerFunc(handler.FindEventHandler)

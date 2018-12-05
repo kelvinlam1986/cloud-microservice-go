@@ -1,6 +1,8 @@
 package rest
 
 import (
+	"cloud-microservice-go/contracts"
+	"cloud-microservice-go/lib/msgqueue"
 	"cloud-microservice-go/lib/persistence"
 	"encoding/hex"
 	"encoding/json"
@@ -8,15 +10,18 @@ import (
 	"github.com/gorilla/mux"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type eventServiceHandler struct {
 	dbHandler persistence.DatabaseHandler
+	eventEmiiter msgqueue.EventEmitter
 }
 
-func New(databaseHandler persistence.DatabaseHandler) *eventServiceHandler {
+func newEventHandler(databaseHandler persistence.DatabaseHandler, eventEmiter msgqueue.EventEmitter) *eventServiceHandler {
 	return &eventServiceHandler{
 		dbHandler: databaseHandler,
+		eventEmiiter: eventEmiter,
 	}
 }
 
@@ -90,6 +95,19 @@ func (eh *eventServiceHandler) NewEventHandler(w http.ResponseWriter, r *http.Re
 		fmt.Fprintf(w, "error occured while persisting event %s", err)
 		return
 	}
+
+	msg := contracts.EventCreatedEvent{
+		ID: hex.EncodeToString(id),
+		Name: event.Name,
+		LocationID: string(event.Location.ID),
+		Start: time.Unix(event.StartDate,0),
+		End: time.Unix(event.EndDate, 0),
+	}
+
+	eh.eventEmiiter.Emit(&msg)
+	w.Header().Set("Content-Type", "application/json;charset=utf8")
+	w.WriteHeader(201)
+	json.NewEncoder(w).Encode(&event)
 
 	fmt.Fprint(w, id)
 }
