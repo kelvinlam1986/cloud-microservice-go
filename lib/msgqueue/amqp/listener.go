@@ -1,16 +1,18 @@
 package amqp
 
 import (
-	"cloud-microservice-go/contracts"
 	"cloud-microservice-go/lib/msgqueue"
-	"encoding/json"
 	"fmt"
 	"github.com/streadway/amqp"
 )
 
+const eventNameHeader = "x-event-name"
+
 type amqbEventListener struct {
 	connection *amqp.Connection
+	exchange string
 	queue string
+	mapper msgqueue.EventMapper
 }
 
 func (a *amqbEventListener) setup() error {
@@ -20,24 +22,32 @@ func (a *amqbEventListener) setup() error {
 	}
 
 	defer channel.Close()
+
+	err = channel.ExchangeDeclare(a.exchange, "topic", true, false, false, false, nil)
+	if err != nil {
+		return  err
+	}
 	_, err = channel.QueueDeclare(a.queue, true, false, false, false, nil)
-	return err
+	if err != nil {
+		return fmt.Errorf("could not declare the queue %s: %s", a.queue, err)
+	}
+
+	return nil
 }
 
-func (a *amqbEventListener) Listen(eventNames ...string) (<-chan msgqueue.Event, <-chan error, error) {
-	channel, err := a.connection.Channel()
+func (l *amqbEventListener) Listen(eventNames ...string) (<-chan msgqueue.Event, <-chan error, error) {
+	channel, err := l.connection.Channel()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	defer channel.Close()
-	for _, eventName := range eventNames {
-		if err := channel.QueueBind(a.queue, eventName, "events", false, nil); err != nil {
-			return nil, nil, err
+	for _, event := range eventNames {
+		if err := channel.QueueBind(l.queue, event, l.exchange, false, nil); err != nil {
+			return nil, nil, fmt.Errorf("could not bind the event %s to queue %s: %s", event, l.queue, err)
 		}
 	}
 
-	msgs, err := channel.Consume(a.queue, "", false, false, false, false, nil)
+	msgs, err := channel.Consume(l.queue, "", false, false, false, false, nil)
 	if err != nil {
 		return  nil, nil, err
 	}
@@ -47,46 +57,41 @@ func (a *amqbEventListener) Listen(eventNames ...string) (<-chan msgqueue.Event,
 
 	go func() {
 		for msg := range msgs {
-			rawEventName, ok := msg.Headers["x-event-name"]
+			rawEventName, ok := msg.Headers[eventNameHeader]
 			if !ok {
-				errors <- fmt.Errorf("msg did not contain x-event-name header")
+				errors <- fmt.Errorf("msg did not contain %s header", eventNameHeader)
 				msg.Nack(false, false)
 				continue
 			}
 
 			eventName, ok := rawEventName.(string)
 			if !ok {
-				errors <- fmt.Errorf("x-event-name header is not string, but %t", rawEventName)
+				errors <- fmt.Errorf("header %s did not contain string", eventNameHeader)
 				msg.Nack(false, false)
 				continue
 			}
 
-			var event msgqueue.Event
-			switch eventName {
-			case "event.created":
-				event = new(contracts.EventCreatedEvent)
-			default:
-				errors <- fmt.Errorf("event type %s is unknown", eventName)
-				continue
-			}
-
-			err := json.Unmarshal(msg.Body, event)
+			event, err := l.mapper.MapEvent(eventName, msg.Body)
 			if err != nil {
-				errors <- err
+				errors <- fmt.Errorf("could not unmarshall event %s, %s", eventName, err)
+				msg.Nack(false, false)
 				continue
 			}
 
 			events <- event
+			msg.Ack(false)
 		}
 	}()
 
 	return events, errors, nil
 }
 
-func NewAMQPEventListener(conn *amqp.Connection, queue string) (msgqueue.EventListener, error) {
-	listener := &amqbEventListener{
+func NewAMQPEventListener(conn *amqp.Connection, exchange string, queue string) (msgqueue.EventListener, error) {
+	listener := amqbEventListener{
 		connection: conn,
+		exchange: exchange,
 		queue: queue,
+		mapper: msgqueue.NewEventMapper(),
 	}
 
 	err := listener.setup()
@@ -94,5 +99,9 @@ func NewAMQPEventListener(conn *amqp.Connection, queue string) (msgqueue.EventLi
 		return nil, err
 	}
 
-	return listener, nil
+	return &listener, nil
+}
+
+func (l *amqbEventListener) Mapper() msgqueue.EventMapper {
+	return l.mapper
 }
