@@ -10,6 +10,7 @@ const (
 	DB = "myevents"
 	USERS = "users"
 	EVENTS = "events"
+	LOCATIONS = "locations"
 )
 
 type MongoDBLayer struct {
@@ -26,6 +27,13 @@ func NewMongoDBLayer(connection string) (persistence.DatabaseHandler, error) {
 	}, err
 }
 
+func (mgoLayer *MongoDBLayer) AddUser(u persistence.User) ([]byte, error) {
+	s := mgoLayer.getFreshSession()
+	defer s.Close()
+	u.ID = bson.NewObjectId()
+	return []byte(u.ID), s.DB(DB).C(USERS).Insert(u)
+}
+
 func (mgoLayer *MongoDBLayer) AddEvent(event persistence.Event) ([]byte, error)  {
 	s := mgoLayer.getFreshSession()
 	defer s.Close()
@@ -38,6 +46,36 @@ func (mgoLayer *MongoDBLayer) AddEvent(event persistence.Event) ([]byte, error) 
 	}
 
 	return []byte(event.ID), s.DB(DB).C(EVENTS).Insert(event)
+}
+
+func (mgoLayer *MongoDBLayer) AddLocation(l persistence.Location) (persistence.Location, error) {
+	s := mgoLayer.getFreshSession()
+	defer s.Close()
+	l.ID = bson.NewObjectId()
+	err := s.DB(DB).C(LOCATIONS).Insert(l)
+	return l, err
+}
+
+func (mgoLayer *MongoDBLayer) AddBookingForUser(id []byte, booking persistence.Booking) error  {
+	s := mgoLayer.getFreshSession()
+	defer s.Close()
+	return s.DB(DB).C(USERS).UpdateId(bson.ObjectId(id), bson.M{"$addToSet": bson.M{"bookings": []persistence.Booking{booking}}})
+}
+
+func (mgoLayer *MongoDBLayer) FindUser(f string, l string) (persistence.User, error)  {
+	s := mgoLayer.getFreshSession()
+	defer s.Close()
+	u := persistence.User{}
+	err := s.DB(DB).C(USERS).Find(bson.M{"first": f, "last": l}).One(&u)
+	return u, err
+}
+
+func (mgoLayer *MongoDBLayer) FindBookingForUser(id []byte) ([]persistence.Booking, error)  {
+	s := mgoLayer.getFreshSession()
+	defer s.Close()
+	u := persistence.User{}
+	err := s.DB(DB).C(USERS).FindId(bson.ObjectId(id)).One(&u)
+	return u.Bookings, err
 }
 
 func (mgoLayer *MongoDBLayer) FindEvent(id []byte) (persistence.Event, error)  {
@@ -62,6 +100,22 @@ func (mgoLayer *MongoDBLayer) FindAllAvailableEvents()  ([]persistence.Event, er
 	events := []persistence.Event{}
 	err := s.DB(DB).C(EVENTS).Find(nil).All(&events)
 	return events, err
+}
+
+func (mgoLayer *MongoDBLayer) FindLocation(id string) (persistence.Location, error) {
+	s := mgoLayer.getFreshSession()
+	defer s.Close()
+	location := persistence.Location{}
+	err := s.DB(DB).C(LOCATIONS).Find(bson.M{"_id": bson.ObjectId(id)}).One(&location)
+	return location, err
+}
+
+func (mgoLayer *MongoDBLayer) FindAllLocation() ([]persistence.Location, error) {
+	s := mgoLayer.getFreshSession()
+	defer s.Close()
+	locations := []persistence.Location{}
+	err := s.DB(DB).C(LOCATIONS).Find(nil).All(&locations)
+	return locations, err
 }
 
 func (mgoLayer *MongoDBLayer) getFreshSession() *mgo.Session {

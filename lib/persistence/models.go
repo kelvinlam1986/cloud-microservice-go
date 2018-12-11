@@ -44,7 +44,7 @@ type Location struct {
 	Country string
 	OpenTime int
 	CloseTime int
-	Hall []Hall
+	Halls []Hall
 }
 
 type Hall struct {
