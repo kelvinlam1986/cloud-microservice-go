@@ -19,6 +19,6 @@ func ServeAPI(endpoint string, databaseHandler persistence.DatabaseHandler, even
 	locationRouter := r.PathPrefix("/locations").Subrouter()
 	locationRouter.Methods("POST").PathPrefix("").HandlerFunc(handler.NewLocationHandler)
 	locationRouter.Methods("GET").PathPrefix("").HandlerFunc(handler.AllLocationsHandler)
-	
+
 	return http.ListenAndServe(endpoint, r)
 }

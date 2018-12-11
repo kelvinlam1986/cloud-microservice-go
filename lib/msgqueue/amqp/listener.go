@@ -4,6 +4,9 @@ import (
 	"cloud-microservice-go/lib/msgqueue"
 	"fmt"
 	"github.com/streadway/amqp"
+	"os"
+	amqphelper "cloud-microservice-go/lib/helper/amqp"
+	"time"
 )
 
 const eventNameHeader = "x-event-name"
@@ -84,6 +87,27 @@ func (l *amqbEventListener) Listen(eventNames ...string) (<-chan msgqueue.Event,
 	}()
 
 	return events, errors, nil
+}
+
+func NewAMQPEventListenerFromEnvironment() (msgqueue.EventListener, error)  {
+	var url string
+	var exchange string
+	var queue string
+
+	if url = os.Getenv("AMQP_URL"); url == "" {
+		url = "amqp://localhost:5672"
+	}
+
+	if exchange = os.Getenv("AMQP_EXCHANGE"); exchange == "" {
+		exchange = "example"
+	}
+
+	if queue = os.Getenv("AMQP_QUEUE"); queue == "" {
+		queue = "example"
+	}
+
+	conn := <- amqphelper.RetryConnect(url, 5 * time.Second)
+	return NewAMQPEventListener(conn, exchange, queue)
 }
 
 func NewAMQPEventListener(conn *amqp.Connection, exchange string, queue string) (msgqueue.EventListener, error) {
